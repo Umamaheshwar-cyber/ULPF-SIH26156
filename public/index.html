@@ -1,0 +1,2164 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+
+  <meta charset="utf-8">
+
+  <meta
+    name="viewport"
+    content="width=device-width, initial-scale=1"
+  >
+
+  <title>
+    ULPF — Universal Log Pre-processing Framework
+  </title>
+
+
+  <style>
+
+    * {
+      box-sizing: border-box;
+    }
+
+
+    body {
+
+      font-family:
+        system-ui,
+        Arial,
+        sans-serif;
+
+      margin: 0;
+
+      background: #0b1020;
+
+      color: #eef2ff;
+
+    }
+
+
+    header {
+
+      padding: 22px 28px;
+
+      background: #111a33;
+
+      border-bottom:
+        1px solid #263458;
+
+    }
+
+
+    h1 {
+
+      margin:
+        0 0 5px;
+
+      font-size: 26px;
+
+    }
+
+
+    h2 {
+
+      margin-top: 0;
+
+    }
+
+
+    .sub {
+
+      color: #aab6d3;
+
+    }
+
+
+    main {
+
+      max-width: 1200px;
+
+      margin: auto;
+
+      padding: 22px;
+
+    }
+
+
+    /* =========================================================
+       DASHBOARD
+       ========================================================= */
+
+    .grid {
+
+      display: grid;
+
+      grid-template-columns:
+        repeat(4, 1fr);
+
+      gap: 12px;
+
+    }
+
+
+    .card,
+    .panel {
+
+      background: #141d38;
+
+      border:
+        1px solid #29385f;
+
+      border-radius: 12px;
+
+      padding: 18px;
+
+    }
+
+
+    .card {
+
+      font-size: 25px;
+
+      display: block;
+
+      margin-bottom: 5px;
+
+    }
+
+
+    .card small {
+
+      display: block;
+
+      font-size: 14px;
+
+      color: #aab6d3;
+
+      margin-bottom: 8px;
+
+    }
+
+
+    .panel {
+
+      margin-top: 16px;
+
+    }
+
+
+    /* =========================================================
+       INPUT
+       ========================================================= */
+
+    textarea {
+
+      width: 100%;
+
+      min-height: 160px;
+
+      background: #0a0f20;
+
+      color: #eef2ff;
+
+      border:
+        1px solid #34446f;
+
+      border-radius: 8px;
+
+      padding: 12px;
+
+      font-family: Consolas, monospace;
+
+      resize: vertical;
+
+    }
+
+
+    select,
+    input[type="text"] {
+
+      padding: 11px;
+
+      border-radius: 8px;
+
+      border:
+        1px solid #34446f;
+
+      background: #121a2e;
+
+      color: #eef2ff;
+
+    }
+
+
+    select {
+
+      margin-bottom: 10px;
+
+    }
+
+
+    input[type="text"] {
+
+      width: 100%;
+
+    }
+
+
+    input[type="file"] {
+
+      width: 100%;
+
+      padding: 10px;
+
+      border-radius: 8px;
+
+      border:
+        1px solid #34446f;
+
+      background: #0a0f20;
+
+      color: #eef2ff;
+
+      cursor: pointer;
+
+    }
+
+
+    .file-box {
+
+      margin:
+        8px 0 12px;
+
+    }
+
+
+    .file-help {
+
+      margin-top: 6px;
+
+      font-size: 12px;
+
+      color: #7f8bad;
+
+    }
+
+
+    /* =========================================================
+       BUTTONS
+       ========================================================= */
+
+    button {
+
+      padding:
+        11px 15px;
+
+      border-radius: 8px;
+
+      border:
+        1px solid #34446f;
+
+      background: #1a2747;
+
+      color: #eef2ff;
+
+      cursor: pointer;
+
+      margin-right: 6px;
+
+      margin-top: 8px;
+
+    }
+
+
+    button:hover {
+
+      opacity: 0.9;
+
+    }
+
+
+    button.primary {
+
+      background: #3558b8;
+
+    }
+
+
+    button.danger {
+
+      background: #612b38;
+
+    }
+
+
+    /* =========================================================
+       TABLE
+       ========================================================= */
+
+    table {
+
+      width: 100%;
+
+      border-collapse:
+        collapse;
+
+      font-size: 13px;
+
+    }
+
+
+    th,
+    td {
+
+      padding: 9px;
+
+      border-bottom:
+        1px solid #29385f;
+
+      text-align: left;
+
+      vertical-align: top;
+
+    }
+
+
+    th {
+
+      color: #aab6d3;
+
+    }
+
+
+    tr:hover {
+
+      background: #182342;
+
+    }
+
+
+    .table-wrap {
+
+      overflow-x: auto;
+
+    }
+
+
+    /* =========================================================
+       BADGES
+       ========================================================= */
+
+    .badge {
+
+      display: inline-block;
+
+      padding:
+        4px 8px;
+
+      border-radius: 12px;
+
+      background: #26385f;
+
+      font-size: 12px;
+
+    }
+
+
+    .severity-high {
+
+      background: #6b2737;
+
+    }
+
+
+    .severity-critical {
+
+      background: #812b35;
+
+    }
+
+
+    .severity-medium {
+
+      background: #665221;
+
+    }
+
+
+    .severity-low {
+
+      background: #285238;
+
+    }
+
+
+    .severity-info {
+
+      background: #26385f;
+
+    }
+
+
+    .trace {
+
+      font-family:
+        Consolas,
+        monospace;
+
+      font-size: 11px;
+
+    }
+
+
+    /* =========================================================
+       FORENSIC DETAIL
+       ========================================================= */
+
+    pre {
+
+      white-space:
+        pre-wrap;
+
+      word-break:
+        break-word;
+
+      background: #090e1c;
+
+      border:
+        1px solid #29385f;
+
+      border-radius: 8px;
+
+      padding: 14px;
+
+      overflow: auto;
+
+      max-height: 500px;
+
+      font-size: 12px;
+
+    }
+
+
+    /* =========================================================
+       STATUS
+       ========================================================= */
+
+    .status {
+
+      margin-top: 10px;
+
+      color: #aab6d3;
+
+      min-height: 20px;
+
+    }
+
+
+    .empty {
+
+      color: #7f8bad;
+
+      padding: 15px 0;
+
+    }
+
+
+    /* =========================================================
+       SEARCH / FILTER
+       ========================================================= */
+
+    .filter-grid {
+
+      display: grid;
+
+      grid-template-columns:
+        2fr 1fr 1fr auto;
+
+      gap: 10px;
+
+      align-items: center;
+
+      margin-bottom: 14px;
+
+    }
+
+
+    .results-info {
+
+      color: #aab6d3;
+
+      font-size: 13px;
+
+      margin-bottom: 10px;
+
+    }
+
+
+    .section-header {
+
+      display: flex;
+
+      justify-content:
+        space-between;
+
+      align-items: center;
+
+      gap: 15px;
+
+      flex-wrap: wrap;
+
+    }
+
+
+    .section-header h2 {
+
+      margin-bottom: 0;
+
+    }
+
+
+    /* =========================================================
+       RESPONSIVE
+       ========================================================= */
+
+    @media (max-width: 1000px) {
+
+      .filter-grid {
+
+        grid-template-columns:
+          1fr 1fr;
+
+      }
+
+    }
+
+
+    @media (max-width: 800px) {
+
+      .grid {
+
+        grid-template-columns:
+          repeat(2, 1fr);
+
+      }
+
+      .filter-grid {
+
+        grid-template-columns:
+          1fr;
+
+      }
+
+    }
+
+
+    @media (max-width: 520px) {
+
+      .grid {
+
+        grid-template-columns:
+          1fr;
+
+      }
+
+    }
+
+  </style>
+
+</head>
+
+
+<body>
+
+
+  <!-- =========================================================
+       HEADER
+       ========================================================= -->
+
+  <header>
+
+    <h1>
+      ULPF — Universal Log Pre-processing Framework
+    </h1>
+
+    <div class="sub">
+
+      SIH26156 working prototype
+      • Ingest → Detect → Parse → Normalize → Preserve → Trace
+
+    </div>
+
+  </header>
+
+
+  <main>
+
+
+    <!-- =======================================================
+         DASHBOARD
+         ======================================================= -->
+
+    <div class="grid">
+
+
+      <div class="card">
+
+        <small>
+          Events processed
+        </small>
+
+        <span id="total">
+          0
+        </span>
+
+      </div>
+
+
+      <div class="card">
+
+        <small>
+          Formats detected
+        </small>
+
+        <span id="formatCount">
+          0
+        </span>
+
+      </div>
+
+
+      <div class="card">
+
+        <small>
+          High/Critical
+        </small>
+
+        <span id="highCount">
+          0
+        </span>
+
+      </div>
+
+
+      <div class="card">
+
+        <small>
+          Raw events preserved
+        </small>
+
+        <span id="rawCount">
+          0
+        </span>
+
+      </div>
+
+
+    </div>
+
+
+    <!-- =======================================================
+         INGEST
+         ======================================================= -->
+
+    <div class="panel">
+
+
+      <h2>
+        1. Ingest log
+      </h2>
+
+
+      <p class="sub">
+
+        Paste one or multiple logs.
+        Auto detection identifies the format of each log.
+
+      </p>
+
+
+      <!-- FORMAT -->
+
+      <select id="type">
+
+        <option value="auto">
+          Auto detect
+        </option>
+
+        <option value="json">
+          JSON
+        </option>
+
+        <option value="cef">
+          CEF
+        </option>
+
+        <option value="keyvalue">
+          Key-Value
+        </option>
+
+        <option value="syslog">
+          Syslog
+        </option>
+
+      </select>
+
+
+      <!-- FILE UPLOAD -->
+
+      <div class="file-box">
+
+        <input
+          type="file"
+          id="logFile"
+          accept=".log,.txt,.json,.cef"
+          onchange="loadLogFile()"
+        >
+
+
+        <div class="file-help">
+
+          Supported:
+          .log, .txt, .json, .cef
+          • Maximum size: 5 MB
+
+        </div>
+
+      </div>
+
+
+      <!-- LOG TEXT -->
+
+      <textarea
+        id="input"
+        placeholder="Example:
+src=10.1.1.5 dst=8.8.8.8 action=DENY severity=3 protocol=TCP
+
+or:
+
+{&quot;source_ip&quot;:&quot;10.1.1.5&quot;,&quot;action&quot;:&quot;DENY&quot;,&quot;severity&quot;:&quot;high&quot;}
+
+or:
+
+CEF:0|DemoVendor|Firewall|1.0|1001|Blocked Connection|3|src=192.168.1.10 dst=10.0.0.5"
+      ></textarea>
+
+
+      <br>
+
+
+      <button
+        class="primary"
+        onclick="processLogs()"
+      >
+
+        Process & Normalize
+
+      </button>
+
+
+      <button
+        onclick="loadDemo()"
+      >
+
+        Load demo logs
+
+      </button>
+
+
+      <button
+        class="danger"
+        onclick="clearEvents()"
+      >
+
+        Clear events
+
+      </button>
+
+
+      <div
+        id="status"
+        class="status"
+      ></div>
+
+
+    </div>
+
+
+    <!-- =======================================================
+         NORMALIZED EVENT STREAM
+         ======================================================= -->
+
+    <div class="panel">
+
+
+      <div class="section-header">
+
+
+        <h2>
+          2. Normalized event stream
+        </h2>
+
+
+        <div
+          id="resultCount"
+          class="results-info"
+        >
+
+          Showing 0 events
+
+        </div>
+
+
+      </div>
+
+
+      <!-- SEARCH + FILTER -->
+
+      <div class="filter-grid">
+
+
+        <input
+          id="searchInput"
+          type="text"
+          placeholder="Search events, IPs, parser, trace ID, raw log..."
+          oninput="renderEvents()"
+        >
+
+
+        <select
+          id="formatFilter"
+          onchange="renderEvents()"
+        >
+
+          <option value="all">
+            All formats
+          </option>
+
+          <option value="json">
+            JSON
+          </option>
+
+          <option value="cef">
+            CEF
+          </option>
+
+          <option value="key-value">
+            Key-Value
+          </option>
+
+          <option value="syslog">
+            Syslog
+          </option>
+
+          <option value="unknown">
+            Unknown
+          </option>
+
+        </select>
+
+
+        <select
+          id="severityFilter"
+          onchange="renderEvents()"
+        >
+
+          <option value="all">
+            All severities
+          </option>
+
+          <option value="critical">
+            Critical
+          </option>
+
+          <option value="high">
+            High
+          </option>
+
+          <option value="medium">
+            Medium
+          </option>
+
+          <option value="low">
+            Low
+          </option>
+
+          <option value="info">
+            Info
+          </option>
+
+        </select>
+
+
+        <button
+          onclick="clearFilters()"
+        >
+
+          Clear filters
+
+        </button>
+
+
+      </div>
+
+
+      <!-- EXPORT BUTTONS -->
+
+      <div>
+
+        <button
+          onclick="exportJSON()"
+        >
+
+          Export JSON
+
+        </button>
+
+
+        <button
+          onclick="exportCSV()"
+        >
+
+          Export CSV
+
+        </button>
+
+      </div>
+
+
+      <br>
+
+
+      <!-- TABLE -->
+
+      <div class="table-wrap">
+
+
+        <table>
+
+
+          <thead>
+
+            <tr>
+
+              <th>
+                Time
+              </th>
+
+              <th>
+                Format
+              </th>
+
+              <th>
+                Event
+              </th>
+
+              <th>
+                Severity
+              </th>
+
+              <th>
+                Source → Destination
+              </th>
+
+              <th>
+                Parser
+              </th>
+
+              <th>
+                Trace
+              </th>
+
+            </tr>
+
+          </thead>
+
+
+          <tbody id="rows">
+          </tbody>
+
+
+        </table>
+
+
+      </div>
+
+
+      <div
+        id="empty"
+        class="empty"
+      >
+
+        No normalized events yet.
+
+      </div>
+
+
+    </div>
+
+
+    <!-- =======================================================
+         FORENSIC TRACE
+         ======================================================= -->
+
+    <div class="panel">
+
+
+      <h2>
+        3. Forensic trace / raw preservation
+      </h2>
+
+
+      <p class="sub">
+
+        Select an event above to inspect its original
+        raw log and normalized representation.
+
+      </p>
+
+
+      <pre id="detail">Process an event to inspect its original raw log and normalized representation.</pre>
+
+
+    </div>
+
+
+  </main>
+
+
+  <script>
+
+
+    // ==========================================================
+    // GLOBAL STATE
+    // ==========================================================
+
+    let currentEvents = [];
+
+
+    // ==========================================================
+    // FILE UPLOAD
+    // ==========================================================
+
+    function loadLogFile() {
+
+
+      const fileInput =
+        document.getElementById("logFile");
+
+
+      const input =
+        document.getElementById("input");
+
+
+      const status =
+        document.getElementById("status");
+
+
+      const file =
+        fileInput.files[0];
+
+
+      if (!file) {
+
+        return;
+
+      }
+
+
+      // 5 MB maximum
+
+      const maxSize =
+        5 * 1024 * 1024;
+
+
+      if (file.size > maxSize) {
+
+
+        status.textContent =
+          "File too large. Maximum allowed size is 5 MB.";
+
+
+        fileInput.value = "";
+
+
+        return;
+
+      }
+
+
+      const reader =
+        new FileReader();
+
+
+      reader.onload =
+        function(event) {
+
+
+          input.value =
+            event.target.result;
+
+
+          status.textContent =
+            `File loaded: ${file.name} (${file.size.toLocaleString()} bytes). Ready to process.`;
+
+        };
+
+
+      reader.onerror =
+        function() {
+
+
+          status.textContent =
+            "Error reading the selected file.";
+
+        };
+
+
+      reader.readAsText(file);
+
+
+    }
+
+
+    // ==========================================================
+    // PROCESS LOGS
+    // ==========================================================
+
+    async function processLogs() {
+
+
+      const text =
+        document
+          .getElementById("input")
+          .value
+          .trim();
+
+
+      const type =
+        document
+          .getElementById("type")
+          .value;
+
+
+      const status =
+        document
+          .getElementById("status");
+
+
+      if (!text) {
+
+
+        status.textContent =
+          "Please enter or load logs first.";
+
+
+        return;
+
+      }
+
+
+      let logs;
+
+
+      /*
+        JSON and CEF are treated as one log
+        when explicitly selected.
+
+        Other modes use one physical line
+        as one event.
+      */
+
+
+      if (
+        type === "json" ||
+        type === "cef"
+      ) {
+
+
+        logs = [text];
+
+
+      } else {
+
+
+        logs =
+          text
+            .split(/\r?\n/)
+            .map(
+              x => x.trim()
+            )
+            .filter(Boolean);
+
+      }
+
+
+      status.textContent =
+        `Processing ${logs.length} log(s)...`;
+
+
+      try {
+
+
+        const response =
+          await fetch(
+            "/api/process",
+            {
+
+              method: "POST",
+
+              headers: {
+
+                "Content-Type":
+                  "application/json"
+
+              },
+
+              body:
+                JSON.stringify({
+
+                  logs,
+
+                  sourceType:
+                    type
+
+                })
+
+            }
+          );
+
+
+        const data =
+          await response.json();
+
+
+        if (!response.ok) {
+
+
+          throw new Error(
+            data.error ||
+            "Processing failed"
+          );
+
+        }
+
+
+        status.textContent =
+          `Successfully processed ${data.count} log(s).`;
+
+
+        await refresh();
+
+
+      } catch (error) {
+
+
+        console.error(error);
+
+
+        status.textContent =
+          "Error: " +
+          error.message;
+
+      }
+
+    }
+
+
+    // ==========================================================
+    // LOAD DEMO LOGS
+    // ==========================================================
+
+    function loadDemo() {
+
+
+      document
+        .getElementById("type")
+        .value =
+        "auto";
+
+
+      const demoLogs = [
+
+
+        'src=10.1.1.5 dst=8.8.8.8 action=DENY severity=3 protocol=TCP vendor=DemoFirewall',
+
+
+        'Sep 9 10:25:31 server01 sshd: Failed password for admin',
+
+
+        '{"source_ip":"10.2.2.7","destination_ip":"10.2.2.10","action":"ALLOW","severity":"low","protocol":"HTTPS"}',
+
+
+        'CEF:0|DemoVendor|Firewall|1.0|1001|Blocked Connection|3|src=192.168.1.10 dst=10.0.0.5 spt=443 dpt=22 proto=TCP'
+
+
+      ];
+
+
+      document
+        .getElementById("input")
+        .value =
+        demoLogs.join("\n");
+
+
+      document
+        .getElementById("status")
+        .textContent =
+        "Demo logs loaded: 4 different formats ready for processing.";
+
+    }
+
+
+    // ==========================================================
+    // REFRESH DASHBOARD
+    // ==========================================================
+
+    async function refresh() {
+
+
+      try {
+
+
+        const [
+          statsResponse,
+          eventsResponse
+        ] = await Promise.all([
+
+
+          fetch("/api/stats"),
+
+
+          fetch("/api/events")
+
+
+        ]);
+
+
+        const stats =
+          await statsResponse.json();
+
+
+        const data =
+          await eventsResponse.json();
+
+
+        currentEvents =
+          data.events || [];
+
+
+        // Total
+
+        document
+          .getElementById("total")
+          .textContent =
+          stats.total || 0;
+
+
+        // Number of unique formats
+
+        document
+          .getElementById("formatCount")
+          .textContent =
+          Object.keys(
+            stats.byFormat || {}
+          ).length;
+
+
+        // High + Critical
+
+        document
+          .getElementById("highCount")
+          .textContent =
+
+          (stats.bySeverity?.high || 0) +
+
+          (stats.bySeverity?.critical || 0);
+
+
+        // Raw preserved
+
+        document
+          .getElementById("rawCount")
+          .textContent =
+
+          currentEvents.filter(
+            e => e.raw_log
+          ).length;
+
+
+        renderEvents();
+
+
+      } catch (error) {
+
+
+        console.error(
+          "Refresh failed:",
+          error
+        );
+
+      }
+
+    }
+
+
+    // ==========================================================
+    // SEARCH + FILTER
+    // ==========================================================
+
+    function getFilteredEvents() {
+
+
+      const search =
+
+        document
+          .getElementById("searchInput")
+          .value
+          .trim()
+          .toLowerCase();
+
+
+      const format =
+
+        document
+          .getElementById("formatFilter")
+          .value
+          .toLowerCase();
+
+
+      const severity =
+
+        document
+          .getElementById("severityFilter")
+          .value
+          .toLowerCase();
+
+
+      return currentEvents.filter(
+        event => {
+
+
+          const eventFormat =
+
+            String(
+              event.detected_format || ""
+            ).toLowerCase();
+
+
+          const eventSeverity =
+
+            String(
+              event.severity || ""
+            ).toLowerCase();
+
+
+          // Format filter
+
+          if (
+            format !== "all" &&
+            eventFormat !== format
+          ) {
+
+            return false;
+
+          }
+
+
+          // Severity filter
+
+          if (
+            severity !== "all" &&
+            eventSeverity !== severity
+          ) {
+
+            return false;
+
+          }
+
+
+          // Search
+
+          if (!search) {
+
+            return true;
+
+          }
+
+
+          const searchableText = [
+
+
+            event.timestamp,
+
+            event.detected_format,
+
+            event.event_type,
+
+            event.eventType,
+
+            event.severity,
+
+            event.source_ip,
+
+            event.destination_ip,
+
+            event.source_port,
+
+            event.destination_port,
+
+            event.protocol,
+
+            event.action,
+
+            event.parser,
+
+            event.trace_id,
+
+            event.raw_log,
+
+            event.vendor,
+
+            event.product
+
+
+          ]
+
+            .map(
+              value =>
+                String(
+                  value ?? ""
+                )
+            )
+
+            .join(" ")
+
+            .toLowerCase();
+
+
+          return searchableText.includes(
+            search
+          );
+
+
+        }
+      );
+
+    }
+
+
+    // ==========================================================
+    // RENDER EVENTS
+    // ==========================================================
+
+    function renderEvents() {
+
+
+      const rows =
+        document.getElementById("rows");
+
+
+      const empty =
+        document.getElementById("empty");
+
+
+      const resultCount =
+        document.getElementById("resultCount");
+
+
+      const filteredEvents =
+        getFilteredEvents();
+
+
+      rows.innerHTML = "";
+
+
+      resultCount.textContent =
+        `Showing ${filteredEvents.length} of ${currentEvents.length} event(s)`;
+
+
+      if (!filteredEvents.length) {
+
+
+        empty.style.display =
+          "block";
+
+
+        if (currentEvents.length) {
+
+
+          empty.textContent =
+            "No events match the current search/filter.";
+
+
+        } else {
+
+
+          empty.textContent =
+            "No normalized events yet.";
+
+        }
+
+
+        return;
+
+      }
+
+
+      empty.style.display =
+        "none";
+
+
+      filteredEvents.forEach(
+        event => {
+
+
+          const tr =
+            document.createElement("tr");
+
+
+          const originalIndex =
+            currentEvents.indexOf(event);
+
+
+          const severity =
+            String(
+              event.severity ||
+              "info"
+            ).toLowerCase();
+
+
+          tr.innerHTML = `
+
+
+            <td>
+
+              ${escapeHtml(
+                event.timestamp || ""
+              )}
+
+            </td>
+
+
+            <td>
+
+              <span class="badge">
+
+                ${escapeHtml(
+                  event.detected_format || ""
+                )}
+
+              </span>
+
+            </td>
+
+
+            <td>
+
+              ${escapeHtml(
+                event.event_type ||
+                "generic"
+              )}
+
+            </td>
+
+
+            <td>
+
+              <span
+                class="badge severity-${escapeHtml(
+                  severity
+                )}"
+              >
+
+                ${escapeHtml(
+                  event.severity ||
+                  "info"
+                )}
+
+              </span>
+
+            </td>
+
+
+            <td>
+
+              ${escapeHtml(
+                event.source_ip || "-"
+              )}
+
+              →
+
+              ${escapeHtml(
+                event.destination_ip || "-"
+              )}
+
+            </td>
+
+
+            <td>
+
+              ${escapeHtml(
+                event.parser || ""
+              )}
+
+            </td>
+
+
+            <td class="trace">
+
+              ${escapeHtml(
+                event.trace_id || ""
+              )}
+
+            </td>
+
+
+          `;
+
+
+          tr.style.cursor =
+            "pointer";
+
+
+          tr.onclick =
+            () => {
+
+              showDetail(
+                originalIndex
+              );
+
+            };
+
+
+          rows.appendChild(tr);
+
+
+        }
+      );
+
+    }
+
+
+    // ==========================================================
+    // CLEAR FILTERS
+    // ==========================================================
+
+    function clearFilters() {
+
+
+      document
+        .getElementById("searchInput")
+        .value = "";
+
+
+      document
+        .getElementById("formatFilter")
+        .value = "all";
+
+
+      document
+        .getElementById("severityFilter")
+        .value = "all";
+
+
+      renderEvents();
+
+    }
+
+
+    // ==========================================================
+    // EXPORT JSON
+    // ==========================================================
+
+    function exportJSON() {
+
+
+      const events =
+        getFilteredEvents();
+
+
+      if (!events.length) {
+
+
+        document
+          .getElementById("status")
+          .textContent =
+          "No events available to export.";
+
+
+        return;
+
+      }
+
+
+      const json =
+        JSON.stringify(
+          events,
+          null,
+          2
+        );
+
+
+      const blob =
+        new Blob(
+          [json],
+          {
+            type:
+              "application/json"
+          }
+        );
+
+
+      const url =
+        URL.createObjectURL(
+          blob
+        );
+
+
+      const link =
+        document.createElement("a");
+
+
+      link.href =
+        url;
+
+
+      link.download =
+        "ulpf-normalized-events.json";
+
+
+      document
+        .body
+        .appendChild(link);
+
+
+      link.click();
+
+
+      link.remove();
+
+
+      URL.revokeObjectURL(
+        url
+      );
+
+
+      document
+        .getElementById("status")
+        .textContent =
+        `Exported ${events.length} event(s) as JSON.`;
+
+    }
+
+
+    // ==========================================================
+    // EXPORT CSV
+    // ==========================================================
+
+    function exportCSV() {
+
+
+      const events =
+        getFilteredEvents();
+
+
+      if (!events.length) {
+
+
+        document
+          .getElementById("status")
+          .textContent =
+          "No events available to export.";
+
+
+        return;
+
+      }
+
+
+      const headers = [
+
+
+        "timestamp",
+
+        "detected_format",
+
+        "event_type",
+
+        "severity",
+
+        "source_ip",
+
+        "destination_ip",
+
+        "source_port",
+
+        "destination_port",
+
+        "protocol",
+
+        "action",
+
+        "parser",
+
+        "trace_id",
+
+        "raw_log"
+
+
+      ];
+
+
+      const rows =
+        events.map(
+          event => {
+
+
+            return headers
+              .map(
+                header => {
+
+
+                  const value =
+                    event[header] ??
+                    "";
+
+
+                  return csvEscape(
+                    value
+                  );
+
+
+                }
+              )
+              .join(",");
+
+
+          }
+        );
+
+
+      const csv =
+
+        headers.join(",") +
+
+        "\n" +
+
+        rows.join("\n");
+
+
+      const blob =
+        new Blob(
+          [csv],
+          {
+            type:
+              "text/csv;charset=utf-8;"
+          }
+        );
+
+
+      const url =
+        URL.createObjectURL(
+          blob
+        );
+
+
+      const link =
+        document.createElement("a");
+
+
+      link.href =
+        url;
+
+
+      link.download =
+        "ulpf-normalized-events.csv";
+
+
+      document
+        .body
+        .appendChild(link);
+
+
+      link.click();
+
+
+      link.remove();
+
+
+      URL.revokeObjectURL(
+        url
+      );
+
+
+      document
+        .getElementById("status")
+        .textContent =
+        `Exported ${events.length} event(s) as CSV.`;
+
+    }
+
+
+    // ==========================================================
+    // CSV ESCAPE
+    // ==========================================================
+
+    function csvEscape(value) {
+
+
+      const text =
+        String(
+          value ?? ""
+        );
+
+
+      return `"${text.replace(
+        /"/g,
+        '""'
+      )}"`;
+
+    }
+
+
+    // ==========================================================
+    // FORENSIC DETAIL
+    // ==========================================================
+
+    function showDetail(index) {
+
+
+      const event =
+        currentEvents[index];
+
+
+      if (!event) {
+
+        return;
+
+      }
+
+
+      document
+        .getElementById("detail")
+        .textContent =
+
+        JSON.stringify(
+          event,
+          null,
+          2
+        );
+
+    }
+
+
+    // ==========================================================
+    // CLEAR EVENTS
+    // ==========================================================
+
+    async function clearEvents() {
+
+
+      try {
+
+
+        await fetch(
+          "/api/events",
+          {
+            method:
+              "DELETE"
+          }
+        );
+
+
+        currentEvents = [];
+
+
+        document
+          .getElementById("detail")
+          .textContent =
+          "Process an event to inspect its original raw log and normalized representation.";
+
+
+        document
+          .getElementById("status")
+          .textContent =
+          "All processed events cleared.";
+
+
+        clearFilters();
+
+
+        await refresh();
+
+
+      } catch (error) {
+
+
+        console.error(error);
+
+
+        document
+          .getElementById("status")
+          .textContent =
+          "Error clearing events: " +
+          error.message;
+
+      }
+
+    }
+
+
+    // ==========================================================
+    // HTML ESCAPE
+    // ==========================================================
+
+    function escapeHtml(value) {
+
+
+      return String(
+        value ?? ""
+      )
+
+        .replace(
+          /&/g,
+          "&amp;"
+        )
+
+        .replace(
+          /</g,
+          "&lt;"
+        )
+
+        .replace(
+          />/g,
+          "&gt;"
+        )
+
+        .replace(
+          /"/g,
+          "&quot;"
+        )
+
+        .replace(
+          /'/g,
+          "&#039;"
+        );
+
+    }
+
+
+    // ==========================================================
+    // INITIAL LOAD
+    // ==========================================================
+
+    refresh();
+
+
+  </script>
+
+
+</body>
+
+</html>
