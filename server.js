@@ -1,16 +1,24 @@
 const express = require("express");
 const path = require("path");
+
 const { analyzeUnknownLog } = require("./ai-assist");
 
-const app = express();
+const {
+  registerParser,
+  getParser,
+  findParser,
+  listParsers,
+  parserCount
+} = require("./parsers/parser-registry");
 
+require("./parsers/builtin-parsers");
+
+const app = express();
 const PORT = process.env.PORT || 3000;
 
-/*
-=========================================================
-ULPF SECURITY / RESOURCE LIMITS
-=========================================================
-*/
+// =========================================================
+// SECURITY / INPUT LIMITS
+// =========================================================
 
 const MAX_REQUEST_SIZE = "5mb";
 const MAX_LOG_SIZE = 512 * 1024;
@@ -26,73 +34,54 @@ const ALLOWED_SOURCE_TYPES = [
   "csv"
 ];
 
-/*
-=========================================================
-MIDDLEWARE
-=========================================================
-*/
+// =========================================================
+// MIDDLEWARE
+// =========================================================
 
-app.use(
-  express.json({
-    limit: MAX_REQUEST_SIZE
-  })
-);
+app.use(express.json({ limit: MAX_REQUEST_SIZE }));
+app.use(express.urlencoded({ extended: false, limit: MAX_REQUEST_SIZE }));
 
-app.use(
-  express.static(
-    path.join(__dirname, "public")
-  )
-);
+app.use(express.static(path.join(__dirname, "public")));
 
-/*
-=========================================================
-IN-MEMORY EVENT STORE
-=========================================================
-*/
+// =========================================================
+// IN-MEMORY EVENT STORE
+// =========================================================
 
 const events = [];
 
-/*
-=========================================================
-UTILITY
-=========================================================
-*/
+// =========================================================
+// UTILITY FUNCTIONS
+// =========================================================
 
 function isoNow() {
   return new Date().toISOString();
 }
 
 function generateEventId() {
-  return `ULPF-${Date.now()}-${Math.floor(Math.random() * 10000)}`;
+  return `evt-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
 }
 
 function generateTraceId() {
-  return `TRACE-${Date.now()}-${Math.floor(Math.random() * 1000)}`;
+  return `trace-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
 }
 
-/*
-=========================================================
-VALIDATION HELPERS
-=========================================================
-*/
+// =========================================================
+// VALIDATION
+// =========================================================
 
 function isValidIPv4(value) {
   if (!value) return true;
 
-  const parts = String(value).trim().split(".");
+  const parts = String(value).split(".");
 
-  if (parts.length !== 4) {
-    return false;
-  }
+  if (parts.length !== 4) return false;
 
-  return parts.every((part) => {
-    if (!/^\d+$/.test(part)) {
-      return false;
-    }
+  return parts.every(part => {
+    if (!/^\d+$/.test(part)) return false;
 
-    const number = Number(part);
+    const num = Number(part);
 
-    return number >= 0 && number <= 255;
+    return num >= 0 && num <= 255;
   });
 }
 
@@ -101,1363 +90,983 @@ function isValidPort(value) {
     return true;
   }
 
-  const text = String(value).trim();
+  const num = Number(value);
 
-  if (!/^\d+$/.test(text)) {
-    return false;
-  }
-
-  const port = Number(text);
-
-  return port >= 0 && port <= 65535;
+  return Number.isInteger(num) && num >= 1 && num <= 65535;
 }
 
 function isValidTimestamp(value) {
   if (!value) return true;
 
-  const text = String(value).trim();
-
-  if (!text) {
-    return true;
-  }
-
-  /*
-  ISO-8601 timestamps
-  */
-  if (
-    /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?Z$/.test(text)
-  ) {
-    return !Number.isNaN(Date.parse(text));
-  }
-
-  /*
-  Common date/time formats
-  */
-  if (
-    /^\d{4}-\d{2}-\d{2}(?:\s+|\T)\d{2}:\d{2}:\d{2}$/.test(text)
-  ) {
-    return !Number.isNaN(Date.parse(text));
-  }
-
-  /*
-  Syslog timestamp:
-  Sep 10 10:30:00
-  */
-  if (
-    /^[A-Z][a-z]{2}\s+\d{1,2}\s+\d{2}:\d{2}:\d{2}$/.test(text)
-  ) {
-    return true;
-  }
-
-  return false;
+  return !Number.isNaN(Date.parse(String(value)));
 }
 
-/*
-=========================================================
-KEY-VALUE PARSER
-=========================================================
-*/
-
-function parseKeyValue(text) {
-  const out = {};
-
-  const re =
-    /([A-Za-z_][A-Za-z0-9_.-]*)=(?:"([^"]*)"|'([^']*)'|([^\s]+))/g;
-
-  let match;
-
-  while ((match = re.exec(text)) !== null) {
-    out[match[1]] =
-      match[2] ??
-      match[3] ??
-      match[4];
-  }
-
-  return out;
-}
-
-/*
-=========================================================
-SEVERITY NORMALIZATION
-=========================================================
-*/
+// =========================================================
+// NORMALIZATION HELPERS
+// =========================================================
 
 function normalizeSeverity(value) {
-  const raw =
-    String(value ?? "")
-      .trim()
-      .toLowerCase();
+  if (value === undefined || value === null || value === "") {
+    return "unknown";
+  }
+
+  const text = String(value).toLowerCase().trim();
 
   const severityMap = {
-    "0": "critical",
-    "1": "high",
-    "2": "high",
+    "0": "low",
+    "1": "low",
+    "2": "low",
     "3": "medium",
-    "4": "low",
-    "5": "low",
-    "6": "info",
-    "7": "debug"
+    "4": "medium",
+    "5": "medium",
+    "6": "high",
+    "7": "high",
+    "8": "critical",
+    "9": "critical",
+    "10": "critical",
+
+    "info": "informational",
+    "informational": "informational",
+    "notice": "low",
+
+    "warning": "medium",
+    "warn": "medium",
+
+    "error": "high",
+    "err": "high",
+
+    "critical": "critical",
+    "crit": "critical",
+
+    "fatal": "critical",
+
+    "debug": "low"
   };
 
-  return (
-    severityMap[raw] ||
-    raw ||
-    "info"
-  );
+  return severityMap[text] || text;
 }
 
-/*
-=========================================================
-NORMALIZER
-=========================================================
-*/
+function cleanValue(value) {
+  if (value === undefined || value === null) {
+    return null;
+  }
 
-function normalize(raw, sourceType = "auto") {
+  if (typeof value === "string") {
+    const trimmed = value.trim();
 
-  const rawText =
-    String(raw ?? "").trim();
+    return trimmed === "" ? null : trimmed;
+  }
 
-  let format = "Unknown";
+  return value;
+}
+
+function firstValue(data, keys) {
+  if (!data || typeof data !== "object") {
+    return null;
+  }
+
+  for (const key of keys) {
+    if (
+      Object.prototype.hasOwnProperty.call(data, key) &&
+      data[key] !== undefined &&
+      data[key] !== null &&
+      data[key] !== ""
+    ) {
+      return cleanValue(data[key]);
+    }
+  }
+
+  return null;
+}
+
+// =========================================================
+// PARSER REGISTRY INTEGRATION
+// =========================================================
+
+const SOURCE_TO_PARSER = {
+  json: "json-parser",
+  cef: "cef-parser",
+  csv: "csv-parser",
+  syslog: "syslog-parser",
+  keyvalue: "keyvalue-parser"
+};
+
+function selectParser(rawText, sourceType) {
+  if (sourceType !== "auto") {
+    const parserName = SOURCE_TO_PARSER[sourceType];
+
+    if (!parserName) {
+      return null;
+    }
+
+    return getParser(parserName);
+  }
+
+  return findParser(rawText);
+}
+
+function parserResultToData(parserResult) {
+  if (parserResult === null || parserResult === undefined) {
+    return {};
+  }
+
+  if (typeof parserResult === "object") {
+    return parserResult;
+  }
+
+  return {
+    message: String(parserResult)
+  };
+}
+
+// =========================================================
+// AI UNKNOWN LOG ANALYSIS
+// =========================================================
+
+function safeAIAnalysis(rawText) {
+  try {
+    return analyzeUnknownLog(rawText);
+  } catch (error) {
+    return {
+      assisted: false,
+      engine: "ULPF Offline AI-Assisted Analyzer",
+      confidence: 0,
+      interpretation: "AI-assisted analysis unavailable.",
+      suggested_format: "Unknown",
+      suggested_event_type: "unknown",
+      suggested_fields: {},
+      detected_fields: [],
+      evidence: ["AI analyzer failed safely."],
+      raw_preserved: true
+    };
+  }
+}
+
+// =========================================================
+// CORE NORMALIZATION ENGINE
+// =========================================================
+
+function normalize(rawLog, sourceType = "auto") {
+  const rawText = String(rawLog ?? "");
+
+  const processingTimestamp = isoNow();
+  const traceId = generateTraceId();
+
+  let parser = null;
   let parsed = {};
-  let parser = "unknown";
+  let detectedFormat = "Unknown";
+  let parseError = null;
   let aiAssistance = null;
 
-  let parseError = "";
+  // -------------------------------------------------------
+  // Select parser through registry
+  // -------------------------------------------------------
 
-  /*
-  =======================================================
-  JSON
-  =======================================================
-  */
+  try {
+    parser = selectParser(rawText, sourceType);
 
-  if (
-    (sourceType === "auto" ||
-      sourceType === "json") &&
-    rawText.startsWith("{")
-  ) {
+    if (parser) {
+      detectedFormat = parser.name
+        .replace("-parser", "")
+        .toUpperCase();
 
-    try {
-
-      const jsonData =
-        JSON.parse(rawText);
-
-      if (
-        jsonData &&
-        typeof jsonData === "object" &&
-        !Array.isArray(jsonData)
-      ) {
-
-        parsed = jsonData;
-        format = "JSON";
-        parser = "json-parser";
+      try {
+        parsed = parserResultToData(parser.parse(rawText));
+      } catch (error) {
+        parseError = error.message || "Parser error";
+        parsed = {};
       }
-
-    } catch (error) {
-
-      parseError = "Malformed JSON";
-      parsed = {};
     }
+  } catch (error) {
+    parseError = error.message || "Parser selection error";
+    parser = null;
   }
 
-  /*
-  =======================================================
-  CEF
-  =======================================================
-  */
+  // -------------------------------------------------------
+  // Unknown / failed parser fallback
+  // -------------------------------------------------------
 
-  if (
-    !Object.keys(parsed).length &&
-    (sourceType === "auto" ||
-      sourceType === "cef") &&
-    rawText.startsWith("CEF:")
-  ) {
-
-    const parts =
-      rawText.split("|");
-
-    parsed = {
-
-      device_vendor:
-        parts[1] || "",
-
-      device_product:
-        parts[2] || "",
-
-      device_version:
-        parts[3] || "",
-
-      event_id:
-        parts[4] || "",
-
-      event_name:
-        parts[5] || "",
-
-      severity:
-        parts[6] || ""
-    };
-
-    /*
-    CEF extension fields
-    */
-
-    const extension =
-      parts
-        .slice(7)
-        .join("|");
-
-    Object.assign(
-      parsed,
-      parseKeyValue(extension)
-    );
-
-    format = "CEF";
-    parser = "cef-parser";
-  }
-
-  /*
-  =======================================================
-  CSV
-  =======================================================
-  */
-
-  if (
-    !Object.keys(parsed).length &&
-    (sourceType === "auto" ||
-      sourceType === "csv") &&
-    rawText.includes(",") &&
-    /\r?\n/.test(rawText)
-  ) {
-
-    const lines =
-      rawText
-        .trim()
-        .split(/\r?\n/);
-
-    if (lines.length >= 2) {
-
-      const headers =
-        lines[0]
-          .split(",")
-          .map(
-            x => x.trim()
-          );
-
-      const values =
-        lines[1]
-          .split(",")
-          .map(
-            x => x.trim()
-          );
-
-      parsed =
-        Object.fromEntries(
-          headers.map(
-            (header, index) => [
-              header,
-              values[index] ?? ""
-            ]
-          )
-        );
-
-      format = "CSV";
-      parser = "csv-parser";
-    }
-  }
-    /*
-  =======================================================
-  SYSLOG
-  IMPORTANT:
-  SYSLOG IS CHECKED BEFORE KEY-VALUE.
-  =======================================================
-  */
-
-  if (
-    !Object.keys(parsed).length &&
-    (sourceType === "auto" ||
-      sourceType === "syslog")
-  ) {
-
-    const match =
-      rawText.match(
-        /^([A-Z][a-z]{2}\s+\d{1,2}\s+\d\d:\d\d:\d\d)\s+(\S+)\s+(.*)$/
-      );
-
-    if (match) {
-
-      const syslogTime =
-        match[1];
-
-      const hostname =
-        match[2];
-
-      const message =
-        match[3];
-
-      parsed = {
-
-        syslog_time:
-          syslogTime,
-
-        hostname:
-          hostname,
-
-        message:
-          message
-      };
-
-      /*
-      SSH authentication failure
-      */
-
-      if (
-        /failed password/i.test(
-          message
-        )
-      ) {
-
-        parsed.event_type =
-          "authentication_failure";
-
-        parsed.action =
-          "failed_login";
-
-        const userMatch =
-          message.match(
-            /for\s+(?:invalid user\s+)?(\S+)/i
-          );
-
-        if (userMatch) {
-
-          parsed.username =
-            userMatch[1];
-        }
-
-        parsed.severity =
-          "high";
-      }
-
-      /*
-      SSH authentication success
-      */
-
-      else if (
-        /accepted password/i.test(
-          message
-        )
-      ) {
-
-        parsed.event_type =
-          "authentication_success";
-
-        parsed.action =
-          "login_success";
-
-        const userMatch =
-          message.match(
-            /for\s+(\S+)/i
-          );
-
-        if (userMatch) {
-
-          parsed.username =
-            userMatch[1];
-        }
-
-        parsed.severity =
-          "info";
-      }
-
-      /*
-      Generic Syslog
-      */
-
-      else {
-
-        parsed.event_type =
-          "system_event";
-      }
-
-      format = "Syslog";
-      parser = "syslog-parser";
-    }
-  }
-
-  /*
-  =======================================================
-  KEY-VALUE
-  =======================================================
-  */
-
-  if (
-    !Object.keys(parsed).length &&
-    (sourceType === "auto" ||
-      sourceType === "keyvalue")
-  ) {
-
-    const kv =
-      parseKeyValue(rawText);
-
-    if (
-      Object.keys(kv).length
-    ) {
-
-      parsed = kv;
-
-      format = "Key-Value";
-      parser = "keyvalue-parser";
-    }
-  }
-
-  /*
-  =======================================================
-  UNKNOWN / RAW PRESERVATION
-  =======================================================
-  */
-
-  if (
-    !Object.keys(parsed).length
-  ) {
+  if (!parser) {
+    detectedFormat = "Unknown";
 
     parsed = {
       message: rawText
     };
 
-    format = "Unknown";
-    parser =
-      "fallback-raw-preservation";
-
-    /*
-    =======================================================
-    AI-ASSISTED UNKNOWN LOG ANALYSIS
-    =======================================================
-    */
-
-    try {
-
-      aiAssistance =
-        analyzeUnknownLog(
-          rawText
-        );
-
-    } catch (error) {
-
-      aiAssistance = {
-
-        assisted: false,
-
-        engine:
-          "ULPF Offline AI-Assisted Analyzer",
-
-        confidence: 0,
-
-        interpretation:
-          "AI-assisted analysis unavailable.",
-
-        suggested_format:
-          "Custom / Unknown",
-
-        suggested_event_type:
-          "generic",
-
-        suggested_fields: {},
-
-        detected_fields: [],
-
-        evidence: [],
-
-        raw_preserved: true
-      };
+    aiAssistance = safeAIAnalysis(rawText);
+  } else if (parseError) {
+    if (detectedFormat === "JSON" || detectedFormat === "UNKNOWN") {
+      aiAssistance = safeAIAnalysis(rawText);
     }
   }
 
-  /*
-  =======================================================
-  FIELD GETTER
-  =======================================================
-  */
-
-  const get = (...keys) => {
-
-    for (const key of keys) {
-
-      if (
-        parsed[key] !== undefined &&
-        parsed[key] !== null &&
-        parsed[key] !== ""
-      ) {
-
-        return parsed[key];
-      }
-    }
-
-    return "";
-  };
-
-  /*
-  =======================================================
-  SEVERITY
-  =======================================================
-  */
-
-  const severity =
-    normalizeSeverity(
-      get(
-        "severity",
-        "sev",
-        "level"
-      )
-    );
-
-  /*
-  =======================================================
-  EVENT TYPE
-  =======================================================
-  */
-
-  const eventType =
-    get(
-      "event_type",
-      "eventType",
-      "eventName",
-      "event_name",
-      "action"
-    ) || "generic";
-
-  /*
-  =======================================================
-  SOURCE TYPE
-  =======================================================
-  */
-
-  let sourceTypeValue =
-    get(
-      "source_type",
-      "device_type",
-      "type"
-    );
-
-  if (!sourceTypeValue) {
-
-    if (format === "Syslog") {
-
-      sourceTypeValue =
-        "system/server";
-
-    } else {
-
-      sourceTypeValue =
-        "network/perimeter";
-    }
-  }
-
-  /*
-  =======================================================
-  VALIDATION
-  =======================================================
-  */
-
-  const sourceIp =
-    get(
-      "source_ip",
-      "src_ip",
-      "src",
-      "srcaddr",
-      "srcip"
-    ) || "";
-
-  const sourcePort =
-    get(
-      "source_port",
-      "src_port",
-      "srcport",
-      "spt"
-    ) || "";
-
-  const destinationIp =
-    get(
-      "destination_ip",
-      "dst_ip",
-      "dst",
-      "dstaddr",
-      "dstip"
-    ) || "";
-
-  const destinationPort =
-    get(
-      "destination_port",
-      "dst_port",
-      "dstport",
-      "dpt"
-    ) || "";
+  // -------------------------------------------------------
+  // Extract common fields
+  // -------------------------------------------------------
 
   const timestamp =
-    get(
+    firstValue(parsed, [
       "timestamp",
+      "@timestamp",
       "time",
-      "date",
-      "syslog_time"
-    ) || "";
+      "datetime",
+      "date"
+    ]) || null;
+
+  const vendor =
+    firstValue(parsed, [
+      "vendor",
+      "device_vendor",
+      "deviceVendor"
+    ]) || null;
+
+  const product =
+    firstValue(parsed, [
+      "product",
+      "device_product",
+      "deviceProduct"
+    ]) || null;
+
+  const eventType =
+    firstValue(parsed, [
+      "event_type",
+      "eventType",
+      "type",
+      "event_name",
+      "eventName",
+      "name"
+    ]) || "generic_event";
+
+  const severity = normalizeSeverity(
+    firstValue(parsed, [
+      "severity",
+      "level",
+      "priority",
+      "loglevel",
+      "log_level"
+    ])
+  );
+
+  const action =
+    firstValue(parsed, [
+      "action",
+      "activity",
+      "operation",
+      "verb"
+    ]) || null;
+
+  const sourceIP =
+    firstValue(parsed, [
+      "source_ip",
+      "sourceIP",
+      "src_ip",
+      "src",
+      "source"
+    ]) || null;
+
+  const sourcePort =
+    firstValue(parsed, [
+      "source_port",
+      "sourcePort",
+      "src_port",
+      "srcPort"
+    ]) || null;
+
+  const destinationIP =
+    firstValue(parsed, [
+      "destination_ip",
+      "destinationIP",
+      "dest_ip",
+      "dst_ip",
+      "destination",
+      "dest"
+    ]) || null;
+
+  const destinationPort =
+    firstValue(parsed, [
+      "destination_port",
+      "destinationPort",
+      "dest_port",
+      "dst_port",
+      "destPort"
+    ]) || null;
+
+  const protocol =
+    firstValue(parsed, [
+      "protocol",
+      "proto"
+    ]) || null;
+
+  const username =
+    firstValue(parsed, [
+      "username",
+      "user",
+      "user_name",
+      "account"
+    ]) || null;
+
+  const hostname =
+    firstValue(parsed, [
+      "hostname",
+      "host",
+      "device",
+      "computer"
+    ]) || null;
+
+  const message =
+    firstValue(parsed, [
+      "message",
+      "msg",
+      "description",
+      "event_message"
+    ]) || rawText;
+
+  // -------------------------------------------------------
+  // Source type
+  // -------------------------------------------------------
+
+  let normalizedSourceType =
+    firstValue(parsed, [
+      "source_type",
+      "sourceType",
+      "category",
+      "device_type"
+    ]);
+
+  if (!normalizedSourceType) {
+    if (detectedFormat === "SYSLOG") {
+      normalizedSourceType = "system/server";
+    } else if (detectedFormat === "CEF") {
+      normalizedSourceType = "security/perimeter";
+    } else {
+      normalizedSourceType = "network/perimeter";
+    }
+  }
+
+  // -------------------------------------------------------
+  // Validation warnings
+  // -------------------------------------------------------
 
   const validationWarnings = [];
 
-  if (
-    sourceIp &&
-    !isValidIPv4(sourceIp)
-  ) {
-
-    validationWarnings.push(
-      "Invalid source IP address"
-    );
+  if (sourceIP && !isValidIPv4(sourceIP)) {
+    validationWarnings.push("Invalid source IP address.");
   }
 
-  if (
-    destinationIp &&
-    !isValidIPv4(destinationIp)
-  ) {
-
-    validationWarnings.push(
-      "Invalid destination IP address"
-    );
+  if (destinationIP && !isValidIPv4(destinationIP)) {
+    validationWarnings.push("Invalid destination IP address.");
   }
 
-  if (
-    sourcePort &&
-    !isValidPort(sourcePort)
-  ) {
-
-    validationWarnings.push(
-      "Invalid source port"
-    );
+  if (!isValidPort(sourcePort)) {
+    validationWarnings.push("Invalid source port.");
   }
 
-  if (
-    destinationPort &&
-    !isValidPort(destinationPort)
-  ) {
-
-    validationWarnings.push(
-      "Invalid destination port"
-    );
+  if (!isValidPort(destinationPort)) {
+    validationWarnings.push("Invalid destination port.");
   }
 
-  if (
-    timestamp &&
-    !isValidTimestamp(timestamp)
-  ) {
-
-    validationWarnings.push(
-      "Invalid timestamp format"
-    );
+  if (timestamp && !isValidTimestamp(timestamp)) {
+    validationWarnings.push("Invalid timestamp.");
   }
 
-  /*
-  =======================================================
-  NORMALIZATION STATUS
-  =======================================================
-  */
+  // -------------------------------------------------------
+  // Normalization status
+  // -------------------------------------------------------
 
-  let normalizationStatus =
-    "normalized";
-
-  if (
-    format === "Unknown" &&
-    parseError
-  ) {
-
-    normalizationStatus =
-      "malformed-preserved";
-
-  } else if (
-    format === "Unknown"
-  ) {
-
-    normalizationStatus =
-      "unknown-preserved";
-
-  } else if (
-    validationWarnings.length
-  ) {
-
-    normalizationStatus =
-      "normalized-with-validation-warnings";
-  }
-
-  /*
-  =======================================================
-  ADDITIONAL FIELDS
-  =======================================================
-  */
-
-  const additionalFields = {
-    ...parsed
-  };
+  let normalizationStatus = "normalized";
 
   if (parseError) {
-
-    additionalFields.parse_error =
-      parseError;
+    normalizationStatus = "malformed-preserved";
+  } else if (detectedFormat === "Unknown") {
+    normalizationStatus = "unknown-preserved";
+  } else if (validationWarnings.length > 0) {
+    normalizationStatus = "normalized-with-validation-warnings";
   }
 
-  if (
-    validationWarnings.length
-  ) {
+  // -------------------------------------------------------
+  // Additional fields
+  // -------------------------------------------------------
 
-    additionalFields.validation_warnings =
-      validationWarnings;
+  const knownKeys = new Set([
+    "timestamp",
+    "@timestamp",
+    "time",
+    "datetime",
+    "date",
+
+    "vendor",
+    "device_vendor",
+    "deviceVendor",
+
+    "product",
+    "device_product",
+    "deviceProduct",
+
+    "event_type",
+    "eventType",
+    "type",
+    "event_name",
+    "eventName",
+    "name",
+
+    "severity",
+    "level",
+    "priority",
+    "loglevel",
+    "log_level",
+
+    "action",
+    "activity",
+    "operation",
+    "verb",
+
+    "source_ip",
+    "sourceIP",
+    "src_ip",
+    "src",
+    "source",
+
+    "source_port",
+    "sourcePort",
+    "src_port",
+    "srcPort",
+
+    "destination_ip",
+    "destinationIP",
+    "dest_ip",
+    "dst_ip",
+    "destination",
+    "dest",
+
+    "destination_port",
+    "destinationPort",
+    "dest_port",
+    "dst_port",
+    "destPort",
+
+    "protocol",
+    "proto",
+
+    "username",
+    "user",
+    "user_name",
+    "account",
+
+    "hostname",
+    "host",
+    "device",
+    "computer",
+
+    "message",
+    "msg",
+    "description",
+    "event_message",
+
+    "source_type",
+    "sourceType",
+    "category",
+    "device_type"
+  ]);
+
+  const additionalParsedFields = {};
+
+  if (parsed && typeof parsed === "object") {
+    for (const [key, value] of Object.entries(parsed)) {
+      if (!knownKeys.has(key)) {
+        additionalParsedFields[key] = value;
+      }
+    }
   }
 
-  /*
-  =======================================================
-  UNIVERSAL EVENT
-  =======================================================
-  */
-
-  const event = {
-
-    event_id:
-      generateEventId(),
-
-    timestamp:
-      timestamp || isoNow(),
-
-    source_type:
-      sourceTypeValue,
-
-    vendor:
-      get(
-        "vendor",
-        "device_vendor",
-        "manufacturer"
-      ) || "Unknown",
-
-    product:
-      get(
-        "product",
-        "device_product",
-        "device"
-      ) || "Unknown",
-
-    event_type:
-      eventType,
-
-    severity:
-      severity,
-
-    action:
-      get(
-        "action",
-        "act",
-        "event_action"
-      ) || "",
-
-    source_ip:
-      sourceIp,
-
-    source_port:
-      sourcePort,
-
-    destination_ip:
-      destinationIp,
-
-    destination_port:
-      destinationPort,
-
-    protocol:
-      get(
-        "protocol",
-        "proto"
-      ) || "",
-
-    username:
-      get(
-        "username",
-        "user",
-        "account"
-      ) || "",
-
-    hostname:
-      get(
-        "hostname",
-        "host"
-      ) || "",
-
-    message:
-      get(
-        "message",
-        "msg"
-      ) || rawText,
-
-    /*
-    Original raw log is ALWAYS preserved.
-    */
-
-    raw_log:
-      rawText,
-
-    parser:
-      parser,
-
-    detected_format:
-      format,
-
-    normalization_status:
-      normalizationStatus,
-
-    processing_timestamp:
-      isoNow(),
-
-    trace_id:
-      generateTraceId(),
-
-    ai_assistance:
-      aiAssistance,
-
-    additional_fields:
-      additionalFields
+  const additionalFields = {
+    parsed: additionalParsedFields,
+    parse_error: parseError,
+    validation_warnings: validationWarnings
   };
 
-  return event;
+  // -------------------------------------------------------
+  // Universal normalized event
+  // -------------------------------------------------------
+
+  return {
+    event_id: generateEventId(),
+
+    timestamp:
+      timestamp && isValidTimestamp(timestamp)
+        ? new Date(timestamp).toISOString()
+        : timestamp || processingTimestamp,
+
+    source_type: normalizedSourceType,
+
+    vendor,
+    product,
+
+    event_type: eventType,
+    severity,
+
+    action,
+
+    source_ip: sourceIP,
+    source_port: sourcePort,
+
+    destination_ip: destinationIP,
+    destination_port: destinationPort,
+
+    protocol,
+    username,
+    hostname,
+
+    message,
+
+    // Original log ALWAYS preserved.
+    raw_log: rawText,
+
+    // Registry-selected parser.
+    parser: parser ? parser.name : "fallback-raw-preservation",
+
+    detected_format: detectedFormat,
+
+    normalization_status: normalizationStatus,
+
+    processing_timestamp: processingTimestamp,
+
+    trace_id: traceId,
+
+    ai_assistance: aiAssistance,
+
+    additional_fields: additionalFields
+  };
 }
 
-/*
-=========================================================
-HEALTH API
-=========================================================
-*/
+// =========================================================
+// HEALTH API
+// =========================================================
 
-app.get(
-  "/api/health",
-  (_, res) => {
+app.get("/api/health", (req, res) => {
+  res.json({
+    status: "ok",
+    service: "ULPF",
+    version: "1.0.0",
 
-    res.json({
+    parser_registry: {
+      enabled: true,
+      parser_count: parserCount()
+    },
 
-      status: "ok",
+    ai_assisted_unknown_parsing: "offline-enabled",
 
-      service: "ULPF",
+    storage: "in-memory",
 
-      version: "1.0.0",
+    uptime_seconds: Math.floor(process.uptime()),
 
-      ai_assisted_unknown_parsing:
-        "offline-enabled",
+    timestamp: isoNow()
+  });
+});
 
-      uptime:
-        Math.floor(
-          process.uptime()
-        )
-    });
-  }
-);
+// =========================================================
+// PARSER REGISTRY API
+// =========================================================
 
-/*
-=========================================================
-EVENTS API
-=========================================================
-*/
+app.get("/api/parsers", (req, res) => {
+  res.json({
+    count: parserCount(),
+    parsers: listParsers()
+  });
+});
 
-app.get(
-  "/api/events",
-  (_, res) => {
+// =========================================================
+// EVENTS API
+// =========================================================
 
-    res.json({
+app.get("/api/events", (req, res) => {
+  res.json({
+    count: events.length,
+    events: [...events].reverse()
+  });
+});
 
-      count:
-        events.length,
+// =========================================================
+// PROCESS API
+// =========================================================
 
-      events:
-        events
-          .slice()
-          .reverse()
-    });
-  }
-);
+app.post("/api/process", (req, res) => {
+  try {
+    const body = req.body || {};
 
-/*
-=========================================================
-PROCESS API
-=========================================================
-*/
+    const sourceType = String(
+      body.sourceType || "auto"
+    ).toLowerCase();
 
-app.post(
-  "/api/process",
-  (req, res) => {
-
-    /*
-    Validate request body
-    */
-
-    if (
-      !req.body ||
-      typeof req.body !== "object" ||
-      Array.isArray(req.body)
-    ) {
-
+    if (!ALLOWED_SOURCE_TYPES.includes(sourceType)) {
       return res.status(400).json({
-
-        error:
-          "Request body must be a JSON object."
+        error: "Invalid sourceType.",
+        allowed_source_types: ALLOWED_SOURCE_TYPES
       });
     }
 
-    /*
-    Source type
-    */
+    let logs = [];
 
-    const sourceType =
-      req.body.sourceType ||
-      "auto";
-
-    if (
-      !ALLOWED_SOURCE_TYPES.includes(
-        sourceType
-      )
-    ) {
-
-      return res.status(400).json({
-
-        error:
-          "Invalid sourceType.",
-
-        allowed:
-          ALLOWED_SOURCE_TYPES
-      });
-    }
-
-    /*
-    Accept either:
-      { "log": "..." }
-
-    or:
-      { "logs": ["...", "..."] }
-    */
-
-    let logs;
-
-    if (
-      Array.isArray(
-        req.body.logs
-      )
-    ) {
-
-      logs =
-        req.body.logs;
-
-    } else if (
-      typeof req.body.log ===
-      "string"
-    ) {
-
-      logs = [
-        req.body.log
-      ];
-
+    if (Array.isArray(body.logs)) {
+      logs = body.logs;
+    } else if (typeof body.log === "string") {
+      logs = [body.log];
+    } else if (typeof body.logs === "string") {
+      logs = [body.logs];
     } else {
-
       return res.status(400).json({
-
-        error:
-          "Provide a log string or logs array."
+        error: "Provide log or logs."
       });
     }
 
-    /*
-    Maximum number of logs
-    */
-
-    if (
-      logs.length >
-      MAX_LOGS_PER_REQUEST
-    ) {
-
-      return res.status(400).json({
-
+    if (logs.length > MAX_LOGS_PER_REQUEST) {
+      return res.status(413).json({
         error:
-          `Too many logs. Maximum allowed is ${MAX_LOGS_PER_REQUEST}.`
+          `Maximum ${MAX_LOGS_PER_REQUEST} logs allowed per request.`
       });
     }
-
-    /*
-    Validate individual logs
-    */
 
     let totalSize = 0;
 
-    const clean = [];
+    const processedEvents = [];
 
-    for (
-      const log of logs
-    ) {
-
-      if (
-        typeof log !==
-        "string"
-      ) {
-
-        return res.status(400).json({
-
-          error:
-            "Every log must be a string."
-        });
-      }
-
-      const trimmed =
-        log.trim();
-
-      /*
-      Ignore empty logs
-      */
-
-      if (!trimmed) {
+    for (const inputLog of logs) {
+      if (typeof inputLog !== "string") {
         continue;
       }
 
-      const size =
-        Buffer.byteLength(
-          trimmed,
-          "utf8"
-        );
+      const rawLog = inputLog;
 
-      /*
-      Individual size limit
-      */
-
-      if (
-        size >
-        MAX_LOG_SIZE
-      ) {
-
-        return res.status(413).json({
-
-          error:
-            "A log exceeds the 512 KB maximum size."
-        });
+      if (!rawLog.trim()) {
+        continue;
       }
 
-      totalSize += size;
-
-      /*
-      Total request log limit
-      */
-
-      if (
-        totalSize >
-        MAX_TOTAL_LOG_SIZE
-      ) {
-
-        return res.status(413).json({
-
-          error:
-            "Total log size exceeds the 5 MB limit."
-        });
-      }
-
-      clean.push(
-        trimmed
+      const logSize = Buffer.byteLength(
+        rawLog,
+        "utf8"
       );
-    }
 
-    /*
-    No usable logs
-    */
+      if (logSize > MAX_LOG_SIZE) {
+        processedEvents.push({
+          event_id: generateEventId(),
+          timestamp: isoNow(),
+          source_type: "unknown",
+          vendor: null,
+          product: null,
+          event_type: "input_rejected",
+          severity: "high",
+          action: "rejected",
 
-    if (
-      clean.length === 0
-    ) {
+          source_ip: null,
+          source_port: null,
 
-      return res.status(400).json({
+          destination_ip: null,
+          destination_port: null,
 
-        error:
-          "No non-empty logs were provided."
-      });
-    }
-
-    /*
-    Process independently.
-    One unexpected parser failure should not
-    terminate the complete request.
-    */
-
-    const processed = [];
-
-    for (
-      const raw of clean
-    ) {
-
-      try {
-
-        const event =
-          normalize(
-            raw,
-            sourceType
-          );
-
-        events.push(
-          event
-        );
-
-        processed.push(
-          event
-        );
-
-      } catch (error) {
-
-        /*
-        Defensive fallback.
-        Original raw log is still preserved.
-        */
-
-        const fallbackEvent = {
-
-          event_id:
-            generateEventId(),
-
-          timestamp:
-            isoNow(),
-
-          source_type:
-            "network/perimeter",
-
-          vendor:
-            "Unknown",
-
-          product:
-            "Unknown",
-
-          event_type:
-            "processing_error",
-
-          severity:
-            "info",
-
-          action:
-            "",
-
-          source_ip:
-            "",
-
-          source_port:
-            "",
-
-          destination_ip:
-            "",
-
-          destination_port:
-            "",
-
-          protocol:
-            "",
-
-          username:
-            "",
-
-          hostname:
-            "",
+          protocol: null,
+          username: null,
+          hostname: null,
 
           message:
-            raw,
+            "Log exceeded maximum allowed size.",
 
-          raw_log:
-            raw,
+          raw_log: rawLog.slice(0, 4096),
+
+          parser: "security-input-limit",
+          detected_format: "Rejected",
+
+          normalization_status:
+            "input-rejected",
+
+          processing_timestamp: isoNow(),
+
+          trace_id: generateTraceId(),
+
+          ai_assistance: null,
+
+          additional_fields: {
+            parse_error:
+              "Maximum log size exceeded.",
+            validation_warnings: []
+          }
+        });
+
+        continue;
+      }
+
+      totalSize += logSize;
+
+      if (totalSize > MAX_TOTAL_LOG_SIZE) {
+        return res.status(413).json({
+          error:
+            `Total request log size cannot exceed ${MAX_TOTAL_LOG_SIZE} bytes.`
+        });
+      }
+
+      let event;
+
+      try {
+        event = normalize(
+          rawLog,
+          sourceType
+        );
+      } catch (error) {
+        event = {
+          event_id: generateEventId(),
+
+          timestamp: isoNow(),
+
+          source_type: "unknown",
+
+          vendor: null,
+          product: null,
+
+          event_type: "processing_error",
+
+          severity: "high",
+
+          action: null,
+
+          source_ip: null,
+          source_port: null,
+
+          destination_ip: null,
+          destination_port: null,
+
+          protocol: null,
+
+          username: null,
+          hostname: null,
+
+          message: rawLog,
+
+          raw_log: rawLog,
 
           parser:
-            "processing-error-preserved",
+            "fallback-error-preservation",
 
-          detected_format:
-            "Unknown",
+          detected_format: "Unknown",
 
           normalization_status:
             "processing-error-preserved",
 
-          processing_timestamp:
-            isoNow(),
+          processing_timestamp: isoNow(),
 
-          trace_id:
-            generateTraceId(),
+          trace_id: generateTraceId(),
 
           ai_assistance:
-            null,
+            safeAIAnalysis(rawLog),
 
           additional_fields: {
+            parse_error:
+              error.message ||
+              "Unknown processing error",
 
-            error:
-              "Parser processing failed."
+            validation_warnings: []
           }
         };
-
-        events.push(
-          fallbackEvent
-        );
-
-        processed.push(
-          fallbackEvent
-        );
       }
+
+      events.push(event);
+      processedEvents.push(event);
     }
 
-    /*
-    Response
-    */
-
-    res.json({
-
-      count:
-        processed.length,
-
-      events:
-        processed
+    return res.json({
+      success: true,
+      processed: processedEvents.length,
+      total_events: events.length,
+      source_type: sourceType,
+      events: processedEvents
+    });
+  } catch (error) {
+    return res.status(500).json({
+      error: "Failed to process logs.",
+      message: error.message
     });
   }
-);
-/*
-=========================================================
-CLEAR EVENTS
-=========================================================
-*/
+});
 
-app.delete(
-  "/api/events",
-  (_, res) => {
+// =========================================================
+// CLEAR EVENTS
+// =========================================================
 
-    events.length = 0;
+app.delete("/api/events", (req, res) => {
+  const previousCount = events.length;
 
-    res.json({
+  events.length = 0;
 
-      status:
-        "cleared"
+  res.json({
+    success: true,
+    cleared: previousCount,
+    message: "All processed events cleared."
+  });
+});
+
+// =========================================================
+// INTEGRATION-READY EXPORT API
+// =========================================================
+
+app.get("/api/export", (req, res) => {
+  const format = String(
+    req.query.format || "ndjson"
+  ).toLowerCase();
+
+  if (!["ndjson", "json"].includes(format)) {
+    return res.status(400).json({
+      error: "Unsupported export format.",
+      supported_formats: [
+        "ndjson",
+        "json"
+      ]
     });
   }
-);
 
-/*
-=========================================================
-STATISTICS
-=========================================================
-*/
+  // Standard JSON export.
+  if (format === "json") {
+    res.setHeader(
+      "Content-Type",
+      "application/json"
+    );
 
-app.get(
-  "/api/stats",
-  (_, res) => {
+    res.setHeader(
+      "Content-Disposition",
+      'attachment; filename="ulpf-events.json"'
+    );
 
-    const byFormat = {};
-    const bySeverity = {};
-
-    for (
-      const event of events
-    ) {
-
-      const format =
-        event.detected_format ||
-        "Unknown";
-
-      const severity =
-        event.severity ||
-        "info";
-
-      byFormat[format] =
-        (byFormat[format] || 0) +
-        1;
-
-      bySeverity[severity] =
-        (bySeverity[severity] || 0) +
-        1;
-    }
-
-    res.json({
-
-      total:
-        events.length,
-
-      byFormat:
-        byFormat,
-
-      bySeverity:
-        bySeverity
-    });
-  }
-);
-
-/*
-=========================================================
-ERROR HANDLING
-=========================================================
-*/
-
-/*
-=========================================================
-MALFORMED JSON REQUEST
-=========================================================
-*/
-
-app.use(
-  (err, req, res, next) => {
-
-    if (
-      err &&
-      err.type ===
-        "entity.parse.failed"
-    ) {
-
-      return res.status(400).json({
-
-        error:
-          "Malformed JSON request body."
-      });
-    }
-
-    /*
-    =======================================================
-    REQUEST TOO LARGE
-    =======================================================
-    */
-
-    if (
-      err &&
-      err.type ===
-        "entity.too.large"
-    ) {
-
-      return res.status(413).json({
-
-        error:
-          "Request body exceeds the 5 MB limit."
-      });
-    }
-
-    /*
-    =======================================================
-    OTHER ERRORS
-    =======================================================
-    */
-
-    if (err) {
-
-      console.error(
-        "Request error:",
-        err.message
-      );
-
-      return res.status(500).json({
-
-        error:
-          "Internal server error."
-      });
-    }
-
-    next();
-  }
-);
-
-/*
-=========================================================
-START SERVER
-=========================================================
-*/
-
-app.listen(
-  PORT,
-  () => {
-
-    console.log(
-      `ULPF running at http://localhost:${PORT}`
+    return res.send(
+      JSON.stringify(events, null, 2)
     );
   }
-);
+
+  // NDJSON export:
+  // One normalized event per line.
+  // Suitable for streaming pipelines,
+  // SIEM ingestion and data-lake workflows.
+  res.setHeader(
+    "Content-Type",
+    "application/x-ndjson"
+  );
+
+  res.setHeader(
+    "Content-Disposition",
+    'attachment; filename="ulpf-events.ndjson"'
+  );
+
+  const ndjson = events
+    .map(event => JSON.stringify(event))
+    .join("\n");
+
+  return res.send(ndjson);
+});
+
+// =========================================================
+// STATISTICS API
+// =========================================================
+
+app.get("/api/stats", (req, res) => {
+  const byFormat = {};
+  const bySeverity = {};
+  const byParser = {};
+  const byNormalizationStatus = {};
+
+  for (const event of events) {
+    const format =
+      event.detected_format || "Unknown";
+
+    const severity =
+      event.severity || "unknown";
+
+    const parser =
+      event.parser || "unknown";
+
+    const status =
+      event.normalization_status ||
+      "unknown";
+
+    byFormat[format] =
+      (byFormat[format] || 0) + 1;
+
+    bySeverity[severity] =
+      (bySeverity[severity] || 0) + 1;
+
+    byParser[parser] =
+      (byParser[parser] || 0) + 1;
+
+    byNormalizationStatus[status] =
+      (byNormalizationStatus[status] || 0) + 1;
+  }
+
+  res.json({
+    total: events.length,
+
+    byFormat,
+    bySeverity,
+    byParser,
+    byNormalizationStatus,
+
+    parser_registry: {
+      count: parserCount(),
+      parsers: listParsers()
+    }
+  });
+});
+
+// =========================================================
+// ROOT ROUTE
+// =========================================================
+
+app.get("/", (req, res) => {
+  res.sendFile(
+    path.join(
+      __dirname,
+      "public",
+      "index.html"
+    )
+  );
+});
+
+// =========================================================
+// ERROR HANDLER
+// =========================================================
+
+app.use((error, req, res, next) => {
+  if (
+    error instanceof SyntaxError &&
+    error.status === 400
+  ) {
+    return res.status(400).json({
+      error: "Malformed JSON request."
+    });
+  }
+
+  if (
+    error.type === "entity.too.large" ||
+    error.status === 413
+  ) {
+    return res.status(413).json({
+      error: "Request payload is too large."
+    });
+  }
+
+  console.error(
+    "Unhandled server error:",
+    error
+  );
+
+  return res.status(500).json({
+    error: "Internal server error."
+  });
+});
+
+// =========================================================
+// START SERVER
+// =========================================================
+
+app.listen(PORT, () => {
+  console.log(
+    `ULPF running at http://localhost:${PORT}`
+  );
+
+  console.log(
+    `Parser Registry: ${parserCount()} parsers loaded`
+  );
+});
