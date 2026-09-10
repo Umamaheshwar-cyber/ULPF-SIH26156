@@ -1,5 +1,6 @@
 const express = require("express");
 const path = require("path");
+const { analyzeUnknownLog } = require("./ai-assist");
 
 const app = express();
 
@@ -219,6 +220,7 @@ function normalize(raw, sourceType = "auto") {
   let format = "Unknown";
   let parsed = {};
   let parser = "unknown";
+  let aiAssistance = null;
 
   let parseError = "";
 
@@ -361,8 +363,7 @@ function normalize(raw, sourceType = "auto") {
       parser = "csv-parser";
     }
   }
-
-  /*
+    /*
   =======================================================
   SYSLOG
   IMPORTANT:
@@ -524,6 +525,49 @@ function normalize(raw, sourceType = "auto") {
     format = "Unknown";
     parser =
       "fallback-raw-preservation";
+
+    /*
+    =======================================================
+    AI-ASSISTED UNKNOWN LOG ANALYSIS
+    =======================================================
+    */
+
+    try {
+
+      aiAssistance =
+        analyzeUnknownLog(
+          rawText
+        );
+
+    } catch (error) {
+
+      aiAssistance = {
+
+        assisted: false,
+
+        engine:
+          "ULPF Offline AI-Assisted Analyzer",
+
+        confidence: 0,
+
+        interpretation:
+          "AI-assisted analysis unavailable.",
+
+        suggested_format:
+          "Custom / Unknown",
+
+        suggested_event_type:
+          "generic",
+
+        suggested_fields: {},
+
+        detected_fields: [],
+
+        evidence: [],
+
+        raw_preserved: true
+      };
+    }
   }
 
   /*
@@ -660,6 +704,7 @@ function normalize(raw, sourceType = "auto") {
     sourceIp &&
     !isValidIPv4(sourceIp)
   ) {
+
     validationWarnings.push(
       "Invalid source IP address"
     );
@@ -669,6 +714,7 @@ function normalize(raw, sourceType = "auto") {
     destinationIp &&
     !isValidIPv4(destinationIp)
   ) {
+
     validationWarnings.push(
       "Invalid destination IP address"
     );
@@ -678,6 +724,7 @@ function normalize(raw, sourceType = "auto") {
     sourcePort &&
     !isValidPort(sourcePort)
   ) {
+
     validationWarnings.push(
       "Invalid source port"
     );
@@ -687,6 +734,7 @@ function normalize(raw, sourceType = "auto") {
     destinationPort &&
     !isValidPort(destinationPort)
   ) {
+
     validationWarnings.push(
       "Invalid destination port"
     );
@@ -696,6 +744,7 @@ function normalize(raw, sourceType = "auto") {
     timestamp &&
     !isValidTimestamp(timestamp)
   ) {
+
     validationWarnings.push(
       "Invalid timestamp format"
     );
@@ -860,6 +909,9 @@ function normalize(raw, sourceType = "auto") {
     trace_id:
       generateTraceId(),
 
+    ai_assistance:
+      aiAssistance,
+
     additional_fields:
       additionalFields
   };
@@ -884,6 +936,9 @@ app.get(
       service: "ULPF",
 
       version: "1.0.0",
+
+      ai_assisted_unknown_parsing:
+        "offline-enabled",
 
       uptime:
         Math.floor(
@@ -1218,6 +1273,9 @@ app.post(
           trace_id:
             generateTraceId(),
 
+          ai_assistance:
+            null,
+
           additional_fields: {
 
             error:
@@ -1249,7 +1307,6 @@ app.post(
     });
   }
 );
-
 /*
 =========================================================
 CLEAR EVENTS
@@ -1325,7 +1382,9 @@ ERROR HANDLING
 */
 
 /*
-Malformed JSON request
+=========================================================
+MALFORMED JSON REQUEST
+=========================================================
 */
 
 app.use(
@@ -1334,7 +1393,7 @@ app.use(
     if (
       err &&
       err.type ===
-      "entity.parse.failed"
+        "entity.parse.failed"
     ) {
 
       return res.status(400).json({
@@ -1345,13 +1404,15 @@ app.use(
     }
 
     /*
-    Request too large
+    =======================================================
+    REQUEST TOO LARGE
+    =======================================================
     */
 
     if (
       err &&
       err.type ===
-      "entity.too.large"
+        "entity.too.large"
     ) {
 
       return res.status(413).json({
@@ -1362,7 +1423,9 @@ app.use(
     }
 
     /*
-    Other errors
+    =======================================================
+    OTHER ERRORS
+    =======================================================
     */
 
     if (err) {

@@ -1018,7 +1018,9 @@ CEF:0|DemoVendor|Firewall|1.0|1001|Blocked Connection|3|src=192.168.1.10 dst=10.
       </p>
 
 
-      <pre id="detail">Process an event to inspect its original raw log and normalized representation.</pre>
+      <div id="ai-panel" style="display:none;"></div>
+
+<pre id="detail">Process an event to inspect its original raw log and normalized representation.</pre>
 
 
     </div>
@@ -2028,28 +2030,88 @@ CEF:0|DemoVendor|Firewall|1.0|1001|Blocked Connection|3|src=192.168.1.10 dst=10.
 
     function showDetail(index) {
 
-
-      const event =
-        currentEvents[index];
-
+      const event = currentEvents[index];
 
       if (!event) {
-
         return;
-
       }
 
+      const detail = document.getElementById("detail");
+      const aiPanel = document.getElementById("ai-panel");
 
-      document
-        .getElementById("detail")
-        .textContent =
+      detail.textContent = JSON.stringify(event, null, 2);
 
-        JSON.stringify(
-          event,
-          null,
-          2
-        );
+      // Show AI assistance only when the backend returned an AI analysis.
+      const ai = event.ai_assistance;
 
+      if (!ai || ai.assisted !== true) {
+        aiPanel.style.display = "none";
+        aiPanel.innerHTML = "";
+        return;
+      }
+
+      const suggestedFields = ai.suggested_fields || {};
+      const detectedFields = Array.isArray(ai.detected_fields)
+        ? ai.detected_fields
+        : [];
+      const evidence = Array.isArray(ai.evidence)
+        ? ai.evidence
+        : [];
+
+      aiPanel.innerHTML = `
+        <h3>AI-Assisted Unknown Log Analysis</h3>
+
+        <div class="ai-grid">
+          <div class="ai-item">
+            <span class="ai-label">Engine</span>
+            <div class="ai-value">${escapeHtml(ai.engine || "Offline analyzer")}</div>
+          </div>
+
+          <div class="ai-item">
+            <span class="ai-label">Confidence</span>
+            <div class="ai-value">${escapeHtml(String(ai.confidence ?? 0))}%</div>
+          </div>
+
+          <div class="ai-item">
+            <span class="ai-label">Suggested format</span>
+            <div class="ai-value">${escapeHtml(ai.suggested_format || "Custom / Unknown")}</div>
+          </div>
+
+          <div class="ai-item">
+            <span class="ai-label">Suggested event type</span>
+            <div class="ai-value">${escapeHtml(ai.suggested_event_type || "generic")}</div>
+          </div>
+        </div>
+
+        <div class="ai-section">
+          <strong>Interpretation</strong>
+          <div class="ai-value">${escapeHtml(ai.interpretation || "No interpretation available.")}</div>
+        </div>
+
+        <div class="ai-section">
+          <strong>Detected fields</strong>
+          <div class="ai-value">${escapeHtml(detectedFields.length ? detectedFields.join(", ") : "None")}</div>
+        </div>
+
+        <div class="ai-section">
+          <strong>Suggested fields</strong>
+          <pre class="ai-fields">${escapeHtml(JSON.stringify(suggestedFields, null, 2))}</pre>
+        </div>
+
+        <div class="ai-section">
+          <strong>Evidence</strong>
+          ${evidence.length
+            ? `<ul class="ai-list">${evidence.map(item => `<li>${escapeHtml(item)}</li>`).join("")}</ul>`
+            : `<div class="ai-value">No evidence recorded.</div>`}
+        </div>
+
+        <div class="ai-section">
+          <strong>Raw log preservation</strong>
+          <div class="ai-value">${ai.raw_preserved === true ? "Yes — original raw log preserved unchanged." : "Not confirmed."}</div>
+        </div>
+      `;
+
+      aiPanel.style.display = "block";
     }
 
 
